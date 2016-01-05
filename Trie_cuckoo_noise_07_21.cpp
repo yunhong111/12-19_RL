@@ -9,6 +9,11 @@ create time: 07/21/2015
 
 ofstream outfileR;
 
+float maxHaoOver = 0.0;
+int indexHaoOver = 0.0;
+float minHaoOver = 1.0;
+int indexMinHaoOver = 0.0;
+
 int main(int argc, char * argv[])
 {
     cout << "\n";
@@ -34,153 +39,7 @@ int main(int argc, char * argv[])
     struct timezone tzp;
     long timeInv = 0;
 
-    // ------------------------------
-    /*load key file*/
-    std::string inFileName = argv[1];
-    std::ifstream infile(inFileName.c_str());
-    if(!infile)
-        std::cout << "Train File Error " << std::endl;
 
-    int flowPrefixInt;
-    string flowStr;
-    vector<int> keyprefixlengths;
-    vector<string> keys;
-    while(infile >> flowPrefixInt >> flowStr)
-    {
-        keyprefixlengths.push_back(flowPrefixInt);
-        keys.push_back(flowStr);
-    }
-    cout<<"* Key size: "<<keys.size()<<endl;
-    infile.clear();
-    infile.close();
-
-    // --------------------------------
-    // get unique prefix length
-    vector<int> uniquePrefix;
-    vector<int> uniqueAggPrefix;
-    prefixNum(keyprefixlengths, uniquePrefix);
-
-    // ------------------------------
-    /*assign actions*/
-    int actionSize = 4;
-    vector<int> keyActions;
-    assignAction(keys,keyActions,actionSize);
-
-    // --------------------------------
-    /*cuckoo table*/
-    // load factor
-    // m: key number, f: fingerprint width, bc: slots num per bucket,
-    // MaxNumKicks: max kickout number in a cuckoo filter
-    cout<<"* Init cuckoo table ... ..."<<endl<<endl;
-    float a;
-    int f,bc;
-    a = 0.9;
-    bc = 4;
-    long m = long(keys.size()/(a*bc))+1;
-    f = 12;
-    long MaxNumKicks = 1000;
-    cuckooTableKey.ClearTable();
-    cuckooTableKey.CuckooTableInit(m,f,bc,MaxNumKicks);
-
-    // --------------------------------
-    // Add original key to cuckoo table
-    cout<<"* Add key to cuckoo table ... ..."<<endl;
-    bool isAddTable;
-    for (int i = 0; i < keys.size(); i++)
-    {
-        isAddTable = cuckooTableKey.AddKeyPrefix(keys[i],(keyprefixlengths[i]),keyActions[i]);
-
-        if(isAddTable == 0)
-        {
-            cout<<"* Flag_add fail"<<endl;
-            cout<<"* Order: "<<i<<"  ";
-        }
-
-    }
-
-    // -----------------------------------------------
-    // init cuckooFilter for flow estimation
-    long flowEstSize = FLOW_EST_SIZE;
-    m = flowEstSize/(a*bc)+1;
-    f = 14;
-    cuckooFilterFlowEst.ClearTable();
-    cuckooFilterFlowEst.cuckooFilterInit(m,f,bc,MaxNumKicks);
-
-    // init black table
-    m = CUCKOO_BLACK_SIZE/(a*bc)+1;
-    cuckooBlackKeyTable.ClearTable();
-    cuckooBlackKeyTable.CuckooTableInit(m,f,bc,
-                                        MaxNumKicks);
-    // -----------------------------------
-    // Init blackkey file
-    cout<<"* Write blackkey to file!"<<endl;
-    ofstream blackKeyFileOut;
-    BLACKFILENAME = "blackkeyfile_" + string(argv[2]) + '_' +
-                          string(argv[4])+ "_tstNum_"+ string(argv[5])+"_b"+string(argv[6]);
-    blackKeyFileOut.open(BLACKFILENAME.c_str());
-    blackKeyFileOut.clear();
-    blackKeyFileOut.close();
-    uint16_t blackBackSize = 0;
-    float feedSumPortion = 0.0;
-
-    // -----------------------------------
-    // Init aggr file
-    cout<<"* Write aggr to file!"<<endl;
-    ofstream aggrFileOut;
-    AGGRFILENAME = "aggrfile" + string(argv[2]) + '_' +
-                          string(argv[4])+ "_tstNum_"+ string(argv[5])+"_b"+string(argv[6]);
-    aggrFileOut.open(AGGRFILENAME.c_str());
-    aggrFileOut.clear();
-    aggrFileOut.close();
-
-    // -----------------------------------------------
-    // Two counters for estimator
-    int2s bigNonCounts;
-    long2s timeCounts;
-    bigNonCounts= vector<vector<int> > (m, vector<int>(bc, 0));
-    timeCounts = vector<vector<long> > (m, vector<long>(bc, 0));
-
-    // ---------------------------------------------
-    /* init cuckoo filter without aggregation*/
-    cout<<"* Init cuckoo filter ... ..."<<endl;
-
-    float storage = strtof(argv[2],NULL); // storage size
-    int finger = 0;
-    long but = 200000/3;
-    char mL0[but][4][20];//
-    bzero(&mL0,sizeof(mL0));
-    //cout<<sizeof(mL0)<<endl;
-    //return 0;
-    vector<vector<size_t> > keyCountcs = vector<vector<size_t> > (but, vector<size_t>(4, 0));;
-    vector<vector<size_t> > keyCountcs0= vector<vector<size_t> > (but, vector<size_t>(4, 0));;
-    vector<vector<size_t> > keyCountDiffs= vector<vector<size_t> > (but, vector<size_t>(4, 0));;
-    initCuckoo(keys,keyprefixlengths,keyActions,storage, finger, mL0);
-    int finger0 = finger;
-
-    /*for(size_t i = 0; i < 100; i++)
-    {
-        for(int j=0; j <4; j++)
-            cout<<mL0[i][j]<<" ";
-    }
-    cout<<endl;*/
-
-    // ---------------------------------------------------
-    /*define mask*/
-    vector<size_t> mask;
-    size_t maskIP;
-    mask.clear();
-    cout<<"* Compute prefixes main ... ..."<<endl<<endl;;
-    for(int i = 8; i <= 32; i++)
-    {
-        maskIP = (size_t(pow(2,i))-1)<<(32-i);
-        mask.push_back(maskIP);
-    }
-
-    // ------------------------------------------------
-    // Init aggregation
-    bool isInit = 1;
-    initAggregation(keys,keyprefixlengths,keyActions,
-                    mask, actionSize, storage, isInit, finger,uniqueAggPrefix,mL0);
 
     // ------------------------------------------------
     // File name for caida trace
@@ -247,50 +106,6 @@ int main(int argc, char * argv[])
     vector<size_t> keyCountDiffsM;
     cuckooFilter.returnKey(keycsM,keyActioncsM,mL0, keyCountcs,keyCountcs0,keyCountDiffs,keyCountcsM,
                                        keyCountcs0M,keyCountDiffsM);
-    /*for(size_t i = 0; i < keycsM.size(); i++)
-    {
-        keyCountfile<<keycsM[i]<<" ";
-        keyCountfileEst<<keycsM[i]<<" ";
-        keyCountfileDiff<<keycsM[i]<<" ";
-       // keyCountfileAll<<keycsM[i]<<" ";
-    }
-    keyCountfile<<endl;
-    keyCountfileEst<<endl;
-    keyCountfileDiff<<endl;
-    //keyCountfileAll<<endl;
-    for(size_t i = 0; i < keycsM.size(); i++)
-    {
-        keyCountfile<<keyActioncsM[i]<<" ";
-        keyCountfileEst<<keyActioncsM[i]<<" ";
-        keyCountfileDiff<<keyActioncsM[i]<<" ";
-       // keyCountfileAll<<keyActioncsM[i]<<" ";
-    }
-    keyCountfile<<endl;
-    keyCountfileEst<<endl;
-    keyCountfileDiff<<endl;
-    //keyCountfileAll<<endl;
-    for(size_t i = 0; i < keycsM.size(); i++)
-    {
-        keyCountfileEst<<keyCountcsM[i]<<" ";
-        //keyCountfileAll<<keyCountcsM[i]<<" ";
-    }
-    //keyCountfileAll<<endl;
-    for(size_t i = 0; i < keycsM.size(); i++)
-    {
-        keyCountfile<<keyCountcs0M[i]<<" ";
-        //keyCountfileAll<<keyCountcs0M[i]<<" ";
-    }
-    //keyCountfile<<endl;
-    //keyCountfileAll<<endl;
-    for(size_t i = 0; i < keycsM.size(); i++)
-    {
-        keyCountfileDiff<<keyCountDiffsM[i]<<" ";
-        //keyCountfileAll<<keyCountDiffsM[i]<<" ";
-    }
-    keyCountfile<<endl;
-    keyCountfileEst<<endl;
-    keyCountfileDiff<<endl;
-    //keyCountfileAll<<endl;*/
 
     // create RLearn for recvs
     RLearn* rLearn[actionSize];
@@ -397,6 +212,12 @@ int main(int argc, char * argv[])
         //keySums.assign(actionSize,0);
         //countIPs.assign(actionSize,0);
 
+        keySumsInv.clear();
+        countIPsInv.clear();
+        keySumsInv.assign(actionSize,0);
+        countIPsInv.assign(actionSize,0);
+
+
         int nthreads, tid;
 
         size_t  ei;
@@ -407,10 +228,16 @@ int main(int argc, char * argv[])
         while(!isEndFlag )
         {
             // init overselection rate each cycle
-            keySumsInv.clear();
-            countIPsInv.clear();
-            keySumsInv.assign(actionSize,0);
-            countIPsInv.assign(actionSize,0);
+            if(line < 100000)
+            {
+                keySumsInv.clear();
+                countIPsInv.clear();
+                keySumsInv.assign(actionSize,0);
+                countIPsInv.assign(actionSize,0);
+
+                for(int ai = 0; ai < actionSize; ai++)
+                rLearn[ai]->clearList();
+            }
 
             // -------------------------------
             // read file
@@ -784,6 +611,8 @@ int main(int argc, char * argv[])
                                 falsePos<<",over,"<<haoFalsePos<<",false0,"<<falsePos0<<",over0,"<<
                                 haoFalsePos0<<",overaggr,"<<overAggr<<",overcuckoo,"<<(haoFalsePosTotal-overAggr)<<",";
                         for(int ai = 0; ai < actionSize; ai++)
+                             outfile0<<"over_ai,"<<haoOversInv[ai]<<",";
+                        for(int ai = 0; ai < actionSize; ai++)
                              outfile0<<"over_ai,"<<haoOvers[ai]<<",";
 
                         outfile0<<"countIP,"<<countIPTotal<<",countIP0,"<<countIP0Total<<",keysum,"<<keySumTotal<<
@@ -796,7 +625,9 @@ int main(int argc, char * argv[])
                                 haoFalsePos0<<" overaggr "<<overAggr<<" overcuckoo "<<(haoFalsePosTotal-overAggr)<<endl;
 
                         for(int ai = 0; ai < actionSize; ai++)
-                             cout<<"over_ai "<<haoOvers[ai]<<" ";
+                             cout<<"over_ai "<<haoOversInv[ai]<<" ";
+                        for(int ai = 0; ai < actionSize; ai++)
+                             cout<<"over_ai,"<<haoOvers[ai]<<",";
 
                         cout<<"countIP "<<countIPTotal<<" countIP0 "<<countIP0Total<<" keysum "<<keySumTotal<<
                                 " pktSum "<<pktSumTotal<<" aggrSum "<<aggrSum<<" blackkey_num "<<countBlack<<" feedback "<<blackBackSize<<" feedsumportion "
@@ -856,14 +687,43 @@ int main(int argc, char * argv[])
                 //if(pktSumTotal > 9.59646e+08)
                 //if(line>60000)
                 {
-                    cout<<"* compare: "<<countIPsInv[0]<<" "<<countIPs[0]<<endl;
+                    // cout<<"* compare: "<<countIPsInv[0]<<" "<<countIPs[0]<<endl;
+                    maxHaoOver = haoOvers[0];
+                    indexHaoOver = 0;
+                    minHaoOver = haoOvers[0];
+                    indexMinHaoOver = 0;
 
                     for(int ri = 0; ri < actionSize; ri++)
                     {
                         //cout<<rLearn[ri]<<endl;
-                        rLearn[ri]->update(slotNums[ri],haoOversInv[ri]);
+                        rLearn[ri]->update(slotNums[ri],haoOvers[ri]);
                         //cout<<"* qleran!"<<endl;
+
+                        // find maximum haoover
+                        if(haoOvers[ri] > maxHaoOver)
+                        {
+                            maxHaoOver = haoOvers[ri];
+                            indexHaoOver = ri;
+                        }
+
+                        // find maximum haoover
+                        if(haoOvers[ri] < minHaoOver)
+                        {
+                            minHaoOver = haoOvers[ri];
+                            indexMinHaoOver = ri;
+                        }
+
+                        // compute ebuse0
+                        if(line<1000000)
+                        {
+                            EPSILON0 = 1.0;
+                        }
+                        else
+                        {
+                            EPSILON0 = 0.20;
+                        }
                         rLearn[ri]->qLearn();
+                        printQList(rLearn[ri]);
                     }
 
                     // ------------------------------------
@@ -874,7 +734,9 @@ int main(int argc, char * argv[])
                     // ---------------------------------
                     // call function
                     //feedbackBlackkey(blackKeys);
-                    feedbackBlackkeyRL(blackKeys, blackActions, rLearn, actionSize,slotNums);
+                    cout<<"* feedback bks!"<<endl;
+                    feedbackBlackkeyRL(blackKeys, blackActions, rLearn, actionSize,slotNums, line);
+                    cout<<"* feedback bks end!"<<endl;
                     /*if(10 < blackKeys.size())
                     {
                         for(size_t i = 0; i < 10; i++)
@@ -1140,18 +1002,22 @@ void initRLearn(RLearn* rLearn)
     // build a RL for rev1
 
     // create a qlist and initialize it
-    float minState = 0;
-    float maxState = 600;   // ovs
-    float minAction = 0;
-    float maxAction = 600; // #slots
+    float minState = 20;
+    float maxState = 820;   // ovs
+    float minAction = 20;
+    float maxAction = 820; // #slots
 
     float state = minState;
     float action = minAction;
     float ovs = 0;
     float ovsTarget = 0.01;
 
-    size_t numS = 6;
-    size_t numA = 6;
+    size_t numS = 8;
+    size_t numA = 8;
+
+    //float initState = 500;
+    //float initAction = 500;
+
 
     //rLearn->rLearnInit();
 
@@ -1163,6 +1029,8 @@ void initRLearn(RLearn* rLearn)
     // initialized state
     cout<<"* init rlearn state... "<<endl;
     rLearn->update(state, ovs);
+
+    printQList(rLearn);
 
     // get suggected action
 
@@ -1178,7 +1046,7 @@ void updateBlacklist(vector<string>& overBigKeys, vector<int>& overActions, RLea
 {
     // for each recv
     // get the suggested action
-    slotNum = rLearn->selectActionSuggest();
+    //slotNum = rLearn->selectActionSuggest();
     cout<<"* suggested action++++++++++++++++++++++++++++++++++: "<<slotNum<<endl;
 
     // write to file
@@ -1233,6 +1101,12 @@ void updateBlacklist(vector<string>& overBigKeys, vector<int>& overActions, RLea
     size_t keysNum = blackKeysRecvSize;
     size_t keyPresNum = blackkeyPres.size();
 
+
+    // record old keys
+    vector<string> blackkeyPresOld;
+    vector<int> actionPresOld;
+    size_t keysPreSeq = 0;
+
     for(size_t i = 0; i < keyPresNum; i++)
     {
         if(keysNum < slotNum && blackActionPres[i] == actionSeq) // IF with the same action
@@ -1247,6 +1121,7 @@ void updateBlacklist(vector<string>& overBigKeys, vector<int>& overActions, RLea
                 blackKeysRecv.push_back(blackkeyPres[i]);
                 blackActRecv.push_back(blackActionPres[i]);
                 keysNum ++;
+                keysPreSeq ++;
 
                 // put it into the blacklist
                 bool addFlag = cuckooBlackKeyTable.AddKeyPrefix(blackkeyPres[i],32, 4);
@@ -1259,16 +1134,34 @@ void updateBlacklist(vector<string>& overBigKeys, vector<int>& overActions, RLea
         }
 
     }
+    for(size_t i = keysPreSeq-1; i < keyPresNum; i++)
+    {
+        if(blackActionPres[i] == actionSeq && keysNum<CUCKOO_BLACK_SIZE)
+        {
+            blackkeyPresOld.push_back(blackkeyPres[i]);
+            actionPresOld.push_back(blackActionPres[i]);
+        }
+    }
 
 
     // -----------------------------------------------
     // wirte blackkeys for each action to blacklist
-    for(int i = 0; i < blackKeysRecv.size(); i++)
+    size_t bkSize = blackKeysRecv.size();
+
+    for(int i = 0; i < bkSize; i++)
         blackKeyFileOut<<blackKeysRecv[i]<<" "<<32<<" "<<blackActRecv[i]<<endl;
+
+    // write other keys
+    size_t bkOldSize = blackkeyPresOld.size();
+
+    for(int i = 0; i < bkOldSize; i++)
+        blackKeyFileOut<<blackkeyPresOld[i]<<" "<<32<<" "<<actionPresOld[i]<<endl;
+
+
 
 }
 void feedbackBlackkeyRL(vector<string>& overBigKeys, vector<int>& overActions, RLearn* rLearn[],
-int actionSize, size_ts& slotNums)
+int actionSize, size_ts& slotNums, size_t line)
 {
 
     // -------------------------------------------
@@ -1309,8 +1202,19 @@ int actionSize, size_ts& slotNums)
     ofstream blackKeyFileOut;
     blackKeyFileOut.open(BLACKFILENAME.c_str());
 
+    /*if(line < 80000)
+    {
+        for(int i = 0; i < actionSize; i++)
+        slotNums[i] = CUCKOO_BLACK_SIZE/4;
+    }
+    else*/
+        selectAction(rLearn, actionSize, slotNums);
+
+    printVec(slotNums);
+
     for(int i = 0; i < actionSize; i++)
     {
+
         updateBlacklist(overBigKeys, overActions, rLearn[i], i, blackkeyPres, actionPres,
         blackKeyFileOut, slotNums[i]);
     }
@@ -1325,15 +1229,336 @@ int actionSize, size_ts& slotNums)
 
 void printQList(RLearn* rLearn)
 {
+    cout<<"Print Qlist!"<<endl;
     for(int i = 0; i < rLearn->_numS; i++)
     {
-        for(int j = 0; j < rLearn->_numA; j++)
+        cout<<rLearn->qList[i][0].state<<" ";
+        for(int j = 0; j < COLNUM; j++)
         {
             // print aValue
-            cout<<rLearn->qList[i*rLearn->_numA+j].qValue<<" ";
+            cout<<rLearn->qList[i][j].qValue<<" ";
         }
         cout<<endl;
     }
+}
+
+void selectAction(RLearn* rLearn[], int actionSize, size_ts& slotNums)
+{
+    //if()
+    vector<vector<QEntry> > qVecs;
+
+    //range
+    int iMin[actionSize], iMax[actionSize];
+
+    for(int i = 0; i < actionSize; i++)
+    {
+        int stateIndex = rLearn[i]->findIndex(rLearn[i]->_states,rLearn[i]->_state);
+        //cout<<"* stateIndex: "<<stateIndex<<endl;
+
+        qVecs.push_back(rLearn[i]->qList[stateIndex]);
+
+        int randNum = (int(rand())%100);
+        float randx = float(randNum)/100.0;
+        cout<<"* randNum: "<<randNum<<endl;
+
+        // random action
+        if(randx < EPSILON0)
+        {
+            int randa = -1;
+            while(rLearn[i]->qList[stateIndex][randa].qValue==-100 || randa == -1 || randa == 0)
+            {
+                //if(stateQStart > 0 && stateQStart < _numS-1)
+                randa =rand()%COLNUM;
+                iMin[i] = randa;
+                iMax[i] = randa + 1;
+
+            }
+
+        }
+        else  // max action
+        {
+            iMin[i] = 0;
+            iMax[i] = COLNUM;
+        }
+    }
+
+    if(maxHaoOver>0.01)
+    {
+        iMin[indexHaoOver] = COLNUM-1;
+        iMax[indexHaoOver] = COLNUM;
+    }
+
+    if(minHaoOver < 0.01 && qVecs[indexMinHaoOver][1].qValue != -100)
+    {
+        iMin[indexMinHaoOver] = 1;
+        iMax[indexMinHaoOver] = 2;
+    }
+    else if (minHaoOver < 0.01 && qVecs[indexMinHaoOver][2].qValue != -100)
+    {
+        iMin[indexMinHaoOver] = 2;
+        iMax[indexMinHaoOver] = 3;
+    }
+
+    vector<QSum> qSums;
+    for (int i1 = iMin[0]; i1 < iMax[0]; i1++)
+    {
+
+        for(int i2 = iMin[1]; i2 < iMax[1]; i2++)
+        {
+            for(int i3 = iMin[2]; i3 < iMax[2]; i3++)
+            {
+                for(int i4 = iMin[3]; i4 < iMax[3]; i4++)
+                {
+                    bool isValid = (qVecs[0][i1].qValue != -100) && (qVecs[1][i2].qValue != -100) &&
+                    (qVecs[2][i3].qValue != -100) && (qVecs[3][i4].qValue != -100);
+
+                    // no qvalue is -100
+                    if(isValid)
+                    {
+
+                        QSum qSum;
+
+                        // state
+                        qSum.states[0] = qVecs[0][i1].state;
+                        qSum.states[1] = qVecs[1][i2].state;
+                        qSum.states[2] = qVecs[2][i3].state;
+                        qSum.states[3] = qVecs[3][i4].state;
+
+                        // action
+                        qSum.actions[0] = qVecs[0][i1].action;
+                        qSum.actions[1] = qVecs[1][i2].action;
+                        qSum.actions[2] = qVecs[2][i3].action;
+                        qSum.actions[3] = qVecs[3][i4].action;
+
+                        // actionsum
+                        qSum.actionSum = qVecs[0][i1].action + qVecs[1][i2].action
+                        + qVecs[2][i3].action + qVecs[3][i4].action;
+
+                        //sum
+                        qSum.sum = qVecs[0][i1].qValue + qVecs[1][i2].qValue + qVecs[2][i3].qValue + qVecs[3][i4].qValue;
+
+                        // all actions should be constrainted by the blacklist volume
+                        if(qSum.actionSum <= CUCKOO_BLACK_SIZE)
+                            qSums.push_back(qSum);
+                    }
+                }
+
+            }
+        }
+    }
+
+    // find the peak assignment
+    if(qSums.size() == 0) // the old srategy
+    {
+        for (int i = 0; i < actionSize; i++)
+            slotNums[i] = qVecs[i][0].action;
+    }
+    else
+    findMax(qSums, slotNums, actionSize);
+
+    vector<QSum>().swap(qSums);
+    vector<vector<QEntry> >().swap(qVecs);
+}
+
+void findMax(vector<QSum>& qSums, size_ts& slotNums, int actionSize )
+{
+    size_t qSumSize = qSums.size();
+
+    if(qSumSize == 0)
+    {
+        cout<<"No feasible solutions+++++++++++++++++++++++++++++++++"<<endl;
+    }
+
+    // the 1st biggest haoover
+    /*if(maxHaoOver > 0.01)
+    {
+
+    }*/
+
+    float qMax = qSums[qSumSize-1].sum;
+
+    size_t index = qSumSize-1;
+
+    for(size_t i = 0; i < qSumSize; i++)
+    {
+        if(qSums[i].sum > qMax)
+        {
+            qMax = qSums[i].sum;
+            index = i;
+        }
+    }
+
+    for(int i = 0; i < actionSize; i++)
+        slotNums[i] = qSums[index].actions[i];
+}
+
+void printVec(vector<size_t>& vec)
+{
+    size_t vecSize = vec.size();
+    for(size_t i = 0; i < vecSize; i++)
+    {
+        cout<<vec[i]<<" ";
+    }
+    cout<<endl;
+}
+
+void loadKeys2Filter()
+{
+    // ------------------------------
+    int switchNum = 3;
+    int actionSize = 2;
+
+    // ------------------------------
+    /*load key file*/
+    std::string inFileName = argv[1];
+    for(int si = 0; si < switchNum; si++)
+    {
+        inFileName = inFileName + num2str(si+1);
+        std::ifstream infile(inFileName.c_str());
+        if(!infile)
+            std::cout << "Train File Error " << std::endl;
+
+        int flowPrefixInt;
+        string flowStr;
+        vector<int> keyprefixlengths;
+        vector<string> keys;
+        while(infile >> flowPrefixInt >> flowStr)
+        {
+            keyprefixlengths.push_back(flowPrefixInt);
+            keys.push_back(flowStr);
+        }
+        cout<<"* Key size: "<<keys.size()<<endl;
+        infile.clear();
+        infile.close();
+
+        // --------------------------------
+        // get unique prefix length
+        vector<int> uniquePrefix;
+        vector<int> uniqueAggPrefix;
+        prefixNum(keyprefixlengths, uniquePrefix);
+
+        // ------------------------------
+        /*assign actions*/
+
+        vector<int> keyActions;
+        assignAction(keys,keyActions,actionSize);
+
+        // --------------------------------
+        /*cuckoo table*/
+        // load factor
+        // m: key number, f: fingerprint width, bc: slots num per bucket,
+        // MaxNumKicks: max kickout number in a cuckoo filter
+        cout<<"* Init cuckoo table ... ..."<<endl<<endl;
+        float a;
+        int f,bc;
+        a = 0.9;
+        bc = 4;
+        long m = long(keys.size()/(a*bc))+1;
+        f = 12;
+        long MaxNumKicks = 1000;
+        cuckooTableKey[si].ClearTable();
+        cuckooTableKey[si].CuckooTableInit(m,f,bc,MaxNumKicks);
+
+        // --------------------------------
+        // Add original key to cuckoo table
+        cout<<"* Add key to cuckoo table ... ..."<<endl;
+        bool isAddTable;
+        for (int i = 0; i < keys.size(); i++)
+        {
+            isAddTable = cuckooTableKey[si].AddKeyPrefix(keys[i],(keyprefixlengths[i]),keyActions[i]);
+
+            if(isAddTable == 0)
+            {
+                cout<<"* Flag_add fail"<<endl;
+                cout<<"* Order: "<<i<<"  ";
+            }
+
+        }
+
+        // -----------------------------------------------
+        // init cuckooFilter for flow estimation
+        long flowEstSize = FLOW_EST_SIZE;
+        m = flowEstSize/(a*bc)+1;
+        f = 14;
+        cuckooFilterFlowEst[si].ClearTable();
+        cuckooFilterFlowEst[si].cuckooFilterInit(m,f,bc,MaxNumKicks);
+
+        // init black table
+        m = CUCKOO_BLACK_SIZE/(a*bc)+1;
+        cuckooBlackKeyTable[si].ClearTable();
+        cuckooBlackKeyTable[si].CuckooTableInit(m,f,bc,
+                                            MaxNumKicks);
+        // -----------------------------------
+        // Init blackkey file
+        cout<<"* Write blackkey to file!"<<endl;
+        ofstream blackKeyFileOut;
+        BLACKFILENAME = "blackkeyfile_" + string(argv[2]) + '_' +
+                              string(argv[4])+ "_tstNum_"+ string(argv[5])+"_b"+string(argv[6]);
+        blackKeyFileOut.open(BLACKFILENAME.c_str());
+        blackKeyFileOut.clear();
+        blackKeyFileOut.close();
+        uint16_t blackBackSize = 0;
+        float feedSumPortion = 0.0;
+
+        // -----------------------------------
+        // Init aggr file
+        cout<<"* Write aggr to file!"<<endl;
+        ofstream aggrFileOut;
+        AGGRFILENAME = "aggrfile" + string(argv[2]) + '_' +
+                              string(argv[4])+ "_tstNum_"+ string(argv[5])+"_b"+string(argv[6]);
+        aggrFileOut.open(AGGRFILENAME.c_str());
+        aggrFileOut.clear();
+        aggrFileOut.close();
+
+        // -----------------------------------------------
+        // Two counters for estimator
+        int2s bigNonCounts;
+        long2s timeCounts;
+        bigNonCounts= vector<vector<int> > (m, vector<int>(bc, 0));
+        timeCounts = vector<vector<long> > (m, vector<long>(bc, 0));
+
+        // ---------------------------------------------
+        /* init cuckoo filter without aggregation*/
+        cout<<"* Init cuckoo filter ... ..."<<endl;
+
+        float storage = strtof(argv[2],NULL); // storage size
+        int finger = 0;
+        long but = 200000/3;
+        char mL0[but][4][20];//
+        bzero(&mL0,sizeof(mL0));
+        //cout<<sizeof(mL0)<<endl;
+        //return 0;
+        vector<vector<size_t> > keyCountcs = vector<vector<size_t> > (but, vector<size_t>(4, 0));;
+        vector<vector<size_t> > keyCountcs0= vector<vector<size_t> > (but, vector<size_t>(4, 0));;
+        vector<vector<size_t> > keyCountDiffs= vector<vector<size_t> > (but, vector<size_t>(4, 0));;
+        initCuckoo(keys,keyprefixlengths,keyActions,storage, finger, mL0, cuckooFilter[si],cuckooFilterInit0[si]);
+        int finger0 = finger;
+
+        /*for(size_t i = 0; i < 100; i++)
+        {
+            for(int j=0; j <4; j++)
+                cout<<mL0[i][j]<<" ";
+        }
+        cout<<endl;*/
+
+        // ---------------------------------------------------
+        /*define mask*/
+        vector<size_t> mask;
+        size_t maskIP;
+        mask.clear();
+        cout<<"* Compute prefixes main ... ..."<<endl<<endl;;
+        for(int i = 8; i <= 32; i++)
+        {
+            maskIP = (size_t(pow(2,i))-1)<<(32-i);
+            mask.push_back(maskIP);
+        }
+
+        // ------------------------------------------------
+        // Init aggregation
+        bool isInit = 1;
+        initAggregation(keys,keyprefixlengths,keyActions,
+                        mask, actionSize, storage, isInit, finger,uniqueAggPrefix,mL0,cuckooFilter[si], cuckooAggrKeyTable[si]);
+    }// end si
 }
 
 

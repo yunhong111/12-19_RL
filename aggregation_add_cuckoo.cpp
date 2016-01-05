@@ -7,12 +7,22 @@ create time: 05/25/2015
 
 #include "aggregation_add_cuckoo.h"
 
-CuckooFilter cuckooFilter;  // cuckoo filter for aggregation
-CuckooFilter cuckooFilterInit0; // cuckoo filter for non aggregation
-CuckooTable cuckooBlackKeyTable;    // cuckoo table for black key
-CuckooTable cuckooTableKey; // cuckoo table for non aggregation
-CuckooTable cuckooAggrKeyTable; // cuckoo table for aggregated key
-CuckooFilter cuckooFilterFlowEst;
+CuckooFilter cuckooFilter[3];  // cuckoo filter for aggregation
+CuckooFilter cuckooFilterInit0[3]; // cuckoo filter for non aggregation
+CuckooTable cuckooBlackKeyTable[3];    // cuckoo table for black key
+CuckooTable cuckooTableKey[3]; // cuckoo table for non aggregation
+CuckooTable cuckooAggrKeyTable[3]; // cuckoo table for aggregated key
+CuckooFilter cuckooFilterFlowEst[3];
+
+/*CuckooFilter cuckooFilter2;  // cuckoo filter for aggregation
+CuckooFilter cuckooFilterInit02; // cuckoo filter for non aggregation
+CuckooTable cuckooBlackKeyTable2;    // cuckoo table for black key
+CuckooTable cuckooTableKey2; // cuckoo table for non aggregation
+
+CuckooFilter cuckooFilter3;  // cuckoo filter for aggregation
+CuckooFilter cuckooFilterInit03; // cuckoo filter for non aggregation
+CuckooTable cuckooBlackKeyTable3;    // cuckoo table for black key
+CuckooTable cuckooTableKey3; // cuckoo table for non aggregation*/
 
 // descend
 struct CmpMass
@@ -39,7 +49,7 @@ struct CmpMassInt
 
 
 int initCuckoo(vector<string> &keys,vector<int> &keyPrefixes,
-                vector<int> &keyActions,float &storage, int& finger, char mL0[][4][20])
+                vector<int> &keyActions,float &storage, int& finger, char mL0[][4][20], CuckooFilter& cuck, CuckooFilter& cuck0)
 {
     //-----------------------------------------------------------
     // Parameters for cuckoo filter
@@ -55,15 +65,15 @@ int initCuckoo(vector<string> &keys,vector<int> &keyPrefixes,
 
     // --------------------------------------------------------
     //init cuckoo filter
-    cuckooFilter.ClearTable();
-    cuckooFilter.cuckooFilterInit(bucketNo,fingerprint,slotNo,maxNumKicks);
+    cuck.ClearTable();
+    cuck.cuckooFilterInit(bucketNo,fingerprint,slotNo,maxNumKicks);
 
-    cuckooFilterInit0.ClearTable();
-    cuckooFilterInit0.cuckooFilterInit(bucketNo,fingerprint,slotNo,
+    cuck0.ClearTable();
+    cuck0.cuckooFilterInit(bucketNo,fingerprint,slotNo,
                                        maxNumKicks);
 
     // add keys to cuckoo filer
-    addCuckooFilter(keys, keyPrefixes, keyActions);
+    addCuckooFilter(keys, keyPrefixes, keyActions, cuck, cuck0);
 
     return 1;
 
@@ -74,7 +84,7 @@ The first aggregation
 size_t initAggregation(vector<string> &keyIns,vector<int> &keyPrefixIns,
                         vector<int> &keyActionIns, vector<size_t> &maskes,
                       int actionSize, float &storage, bool isInit,
-                      int &fingerprintOld,vector<int> &uniqueAggKeyprefixes,char mL0[][4][20] )
+                      int &fingerprintOld,vector<int> &uniqueAggKeyprefixes,char mL0[][4][20], CuckooFilter cuck, CuckooTable cuckAggr)
 {
     // ----------------------------------------
     // Get indexes
@@ -244,8 +254,8 @@ size_t initAggregation(vector<string> &keyIns,vector<int> &keyPrefixIns,
     cout<<"* Fingerprint length: "<<fingerprint<<endl;
 
     //init cuckoo filter
-    cuckooFilter.ClearTable();
-    cuckooFilter.cuckooFilterInit(bucketNo,fingerprint,slotNo,maxNumKicks);
+    cuck.ClearTable();
+    cuck.cuckooFilterInit(bucketNo,fingerprint,slotNo,maxNumKicks);
 
     // add key to cuckoo filter
     addCuckooFiltermL(keys, keyActions,mL0);
@@ -287,7 +297,7 @@ size_t initAggregation(vector<string> &keyIns,vector<int> &keyPrefixIns,
     // Add aggregate keys to cuckooTable
     size_t aggregateKeySize = aggregateKeys.size();
     bucketNo = long(aggregateKeySize/(loadFactor*slotNo));
-    cuckooAggrKeyTable.CuckooTableInit(bucketNo,fingerprint,slotNo,maxNumKicks);
+    cuckAggr.CuckooTableInit(bucketNo,fingerprint,slotNo,maxNumKicks);
 
     for(size_t i = 0; i < aggregateKeySize; i++)
     {
@@ -296,7 +306,7 @@ size_t initAggregation(vector<string> &keyIns,vector<int> &keyPrefixIns,
         string prefixstr = aggregateKeys[i].substr(found+1,
                                                    aggregateKeys[i].size()-found);
 
-        cuckooAggrKeyTable.AddKey(str,str2num(prefixstr));
+        cuckAggr.AddKey(str,str2num(prefixstr));
     }
 
     keyPrefixes.clear();
@@ -791,7 +801,7 @@ bool clusterAction(vector<string> &flow, vector<int> &flowaction,
 }
 
 bool addCuckooFilter(vector<string> &keys, vector<int> &keyPrefixes,
-                      vector<int> &keyActions)
+                      vector<int> &keyActions, CuckooFilter& cuck, CuckooFilter& cuck0)
 {
     cout<<"* Cuckoo filter adding ..."<<endl;
     // define variables
@@ -805,7 +815,7 @@ bool addCuckooFilter(vector<string> &keys, vector<int> &keyPrefixes,
         str = keys[i]+'/'+num2str(keyPrefixes[i]);
 
         //add keys to cuckoo filter
-        flagAdd = cuckooFilter.AddKey(str,(keyActions[i]));
+        flagAdd = cuck.AddKey(str,(keyActions[i]));
         if(flagAdd == 0)
         {
             countFail++;
@@ -814,7 +824,7 @@ bool addCuckooFilter(vector<string> &keys, vector<int> &keyPrefixes,
             break;
         }
 
-        flagAdd0 =cuckooFilterInit0.AddKey(str,(keyActions[i]));
+        flagAdd0 =cuck0.AddKey(str,(keyActions[i]));
         if(flagAdd0 == 0)
         {
             countFail++;

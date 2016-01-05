@@ -33,6 +33,14 @@ void updateBlacklist(vector<string>& overBigKeys, vector<int>& overActions, RLea
 , vector<string>& blackkeyPres, vector<int>& blackActionPres, ofstream& blackKeyFileOut, size_t& slotNum);
 
 void feedbackBlackkeyRL(vector<string>& overBigKeys, vector<int>& overActions, RLearn* rLearn[], int actionSize,
-size_ts& slotNums);
+size_ts& slotNums, size_t line);
+
+void printQList(RLearn* rLearn);
+
+void selectAction(RLearn* rLearn[], int actionSize, size_ts& slotNums);
+
+void findMax(vector<QSum>& qSums, size_ts& slotNums, int actionSize );
+
+void printVec(vector<size_t>& vec);
 
 

@@ -1,7 +1,8 @@
 
 #include "RL.h"
 
-float EPSILON0 = 0.2;
+float EPSILON0 = 0.8;
+int COLNUM = 5;
 /**
 constructor: initialize some v.r.
 */
@@ -10,6 +11,7 @@ RLearn::RLearn()
         qList.clear();
         _indexCur = 0;
 
+
 }
 void RLearn::rLearnInit(size_t numS, size_t numA, float ovsTarget)
 {
@@ -17,20 +19,23 @@ void RLearn::rLearnInit(size_t numS, size_t numA, float ovsTarget)
     _numA = numA;
     _ovsTarget = ovsTarget;
     _indexCur = 0;
+    srand (time(0));
 }
 
 void RLearn::update(float state, float ovs)
 {
-    _state = _nextState;
     _action = _actionSuggest;
 
     // find the index of the current state and action
+    cout<<" states size: "<<_states.size()<<" state: "<<_state<<endl;
     size_t stateIndexCur = findIndex(_states,_state);
-    size_t actionIndexCur = findIndex(_actions,_action);
+    //size_t actionIndexCur = findIndex(_actions,_action);
 
-    //cout<<"* state: "<<_state<<" * action: "<<_action<<" * stateIndexCur: "<<stateIndexCur<<"* actionIndexCur+++++++++++++++++++++++++++++++++" <<actionIndexCur<<endl;
-    _indexCur = stateIndexCur*_numA + actionIndexCur;
-    cout<<"* _indexCur: "<<_indexCur<<" * action: "<<_action<<endl;
+    cout<<"* state: "<<_state<<" * action: "<<_action
+    <<" * stateIndexCur: "<<stateIndexCur<<endl;
+
+   // _indexCur = stateIndexCur*_numA + actionIndexCur;
+    _indexCur = stateIndexCur;  // update the current state index
 
     _nextState = findDisceteValue(state, 1);
     //_action = findDisceteValue(action, 0);;
@@ -39,27 +44,34 @@ void RLearn::update(float state, float ovs)
     // compute instant reward
     reward(ovs);
 
-    cout<<"* nextstate: "<<_nextState<<" * Reward: "<<_reward<<endl;
+    cout<<"* _indexCur: "<<_indexCur<<" * action: "<<_action<<endl;
+    cout<<"* input: "<<state<<" * nextstate: "<<_nextState<<" * Reward: "<<_reward<<endl;
 
     //cout<<"* Reward: "<<_reward<<endl;
 }
 
 void RLearn::reward(float ovs)
 {
-    /*if(fabs(ovs - _ovsTarget) < 0.0005)
+    float C1 = (ovs - _ovsTarget);
+    if(fabs(C1) < 0.0005)
     {
         //_reward = 0.0001*1.0/float(pow(0.0005,2.0));
-        _reward = 0.1*1.0/0.0005;
+        _reward = -pow(C1*10.0,2.0)*5.0;
     }
-    else if(ovs>_ovsTarget) // small reward
-        _reward = 0.01*1.0/fabs(ovs - _ovsTarget);
-    else // big reward
+    else if(fabs(C1) < 0.001 && C1 < 0) // small reward
+        _reward = -pow(C1*10.0,2.0)*10.0;
+
+    else if(ovs > _ovsTarget)
     {
-        _reward = 0.1*1.0/fabs(ovs - _ovsTarget);
-    }*/
+        _reward = -pow(C1*10.0,2.0)*30.0;
+    }
+    else
+    {
+        _reward = -pow(C1*10.0,2.0)*10.0;
+    }
 
     //if(fabs(ovs-_ovsTarget)>0.5*_ovsTarget)
-    float C1 = (ovs - _ovsTarget);
+    /*float C1 = (ovs - _ovsTarget);
     if(ovs>_ovsTarget) // small reward
     {
        // _reward = -10*fabs(ovs - _ovsTarget);
@@ -70,94 +82,125 @@ void RLearn::reward(float ovs)
     {
        // _reward = -5*fabs(ovs - _ovsTarget);
         _reward = 1.0/float(exp(pow(C1*100.0,2.0)));
-    }
+    }*/
    // _reward = 0.0001*1.0/float(pow((ovs - _ovsTarget),2.0));
 
-   cout<<"* diff: "<<fabs(ovs - _ovsTarget)<<" * reward: "<<_reward<<endl;
+   // cout<<"* diff: "<<fabs(ovs - _ovsTarget)<<" * reward: "<<_reward<<endl;
 }
 
 
 void RLearn::qLearn()
 {
 
+    // Find Q(S',A') max;
+    // find the index of next state
+    size_t stateIndexNest = findIndex(_states,_nextState);
+
+    // find the action with maximum q values
+    size_t index;
+    QEntry qEntry = maxEntry(stateIndexNest, _nextState, index);
+    _qmax = qEntry.qValue;
+
 
     float qcur = 0.0;
     float total = _reward + GAMMA*_qmax;
 
-    cout<<"* _indexCur: "<<_indexCur<<" * Q value: "<<qList[_indexCur].qValue<<endl;
+    // cout<<"* _indexCur: "<<_indexCur<<" * Q value: "<<qList[_indexCur][_actionSuggestIndex].qValue<<endl;
 
-    qcur = (1-ALPHA)*qList[_indexCur].qValue+ ALPHA*total;
+    qcur = (1-ALPHA)*qList[_indexCur][_actionSuggestIndex].qValue+ ALPHA*total;
 
     // update the entry in table
-    qList[_indexCur].qValue = qcur;
+    qList[_indexCur][_actionSuggestIndex].qValue = qcur;
     //_qold = qcur;
     //cout<<"* _indexCur: "<<_indexCur<<" * Q value: "<<qcur<<endl;
     //return qcur;
+    _state = _nextState;
 }
 
 float RLearn::selectActionSuggest()
 {
     cout<<"* compute EPSILON0! **********************"<<endl;
-    computeEPSILON0();
-    // find the index of next state
-    size_t stateIndexNext = findIndex(_states,_nextState);
-    size_t stateQStart = stateIndexNext*_numA;
-    cout<<"* stateIndexNext: "<<stateIndexNext<<" stateQStart: "<<stateQStart<<endl;
+    //computeEPSILON0();
+    // find the index of state
+    size_t stateIndex = findIndex(_states,_state);
+    //size_t stateQStart = stateIndexNext*_numA;
+    size_t stateQStart = stateIndex;
+
+    // cout<<"* stateIndex: "<<stateIndex<<" stateQStart: "<<stateQStart<<endl;
     // use epsilon greedy policy
-    float randx = float((rand()%100))/100.0;
-    //cout<<"* randx: "<<randx<<endl;
+    int randNum = (int(rand())%100);
+    float randx = float(randNum)/100.0;
+    cout<<"* randNum: "<<randNum<<endl;
     if(randx < EPSILON0)
     {
         // take a random action for current state
         //size_t qListSize = qList.size();
-        size_t randa = rand()%_numA;
-        //cout<<"* randa: "<<randa<<endl;
-        QEntry qEntry = qList[stateQStart+randa];
+        //size_t randa = rand()%_numA;
+        int randa = -1;
+        while(qList[stateQStart][randa].qValue==-100 || randa == -1)
+        {
+            //if(stateQStart > 0 && stateQStart < _numS-1)
+            randa =rand()%COLNUM;
+
+        }
+
+        /*else if(stateQStart == 0)   // the 1st state
+            randa = rand()%COLNUM;
+        else if(stateQStart == _numS-1) // the last state
+            randa = 1;*/
+
+        QEntry qEntry = qList[stateQStart][randa];
         _actionSuggest = qEntry.action;
-        _qmax = qEntry.qValue;
+        _actionSuggestIndex = randa;
+        //_qmax = qEntry.qValue;
 
         //_indexCur = stateQStart+randa;
 
-        cout<<"* randx<epsilon: "<<_actionSuggest<<endl;
+        cout<<"* randa: "<<randa<<" "<<"* randx<epsilon: "<<_actionSuggest<<endl;
     }
     else
     {
         // find the action with maximum q values
-        QEntry qEntry = maxEntry(stateQStart, _nextState);
+        size_t index;
+        QEntry qEntry = maxEntry(stateQStart, _state, index);
         _actionSuggest = qEntry.action;
-        _qmax = qEntry.qValue;
+        _actionSuggestIndex = index;
+        //_actionSuggestIndex =
+        //_qmax = qEntry.qValue;
         //cout<<"* randx>epsilon: "<<_actionSuggest<<endl;
 
 
     }
+    cout<<"* current state:++++++++++++++++++++++++++++++++++ "<<_state<<endl;
     return _actionSuggest;
 }
 
 
-QEntry RLearn::maxEntry(size_t beginI, float state)
+QEntry RLearn::maxEntry(size_t beginI, float state, size_t& index)
 {
 
-    size_t index = beginI;
+    index = 0;
     QEntry qEntry;
 
     if(beginI >= 0)
     {
 
-        float maxQvalue = qList[beginI].qValue;
+        float maxQvalue = qList[beginI][0].qValue;
 
-        for(size_t i = beginI; i < beginI+_numA; i++)
+        //for(size_t i = beginI; i < beginI+_numA; i++)
+        for(size_t i = 0; i < COLNUM; i++)
         {
             // find all qentry with the same state
-            if(qList[i].state == state)
+            if(qList[beginI][i].state == state && qList[beginI][i].qValue != -100)
             {
                 //cout<<"* i:"<<i<<" * qList[i].qValue: "<<qList[i].qValue<<" state: "<<maxQvalue<<endl;
-                if(qList[i].qValue > maxQvalue)
+                if(qList[beginI][i].qValue >= maxQvalue)
                 {
-                    maxQvalue = qList[i].qValue;
+                    maxQvalue = qList[beginI][i].qValue;
                     index = i;
                     //cout<<"max:::"<<" "<<endl;
                 }
-                cout<<"* i: "<<i<<" *: "<<qList[i].qValue<<"     ";
+                cout<<"* i: "<<i<<" *: "<<qList[beginI][i].qValue<<"     ";
             }
 
         }
@@ -167,8 +210,9 @@ QEntry RLearn::maxEntry(size_t beginI, float state)
         cout<<"* RLearn::maxEntry:find nothing!"<<endl;
     }
     //_indexCur = index;
-    qEntry = qList[index];
-    cout<<"* max index: "<<index<<endl;
+
+    qEntry = qList[beginI][index];
+    cout<<endl<<"* max index: "<<index<<endl;
 
     if(index == -1)
     {
@@ -239,7 +283,7 @@ void RLearn::initQtable(float minState, float maxState, float minAction, float m
         qvec.clear();
         float stateTmp = minState + i*granuS;
         // discrete actions
-        for(size_t j = 0; j < 3; j++)
+        for(size_t j = 0; j < COLNUM; j++)
         {
             float actionTmp;
 
@@ -248,19 +292,53 @@ void RLearn::initQtable(float minState, float maxState, float minAction, float m
                 actionTmp = stateTmp;
             else
             {
-                actionTmp = stateTmp + (-1)^j*granuA;  // indeament or decrement
+                //actionTmp = stateTmp + float(pow(-1,j)*granuA);  // indeament or decrement
+                switch(j)
+                {
+                    case 0:
+                    {
+                        actionTmp = stateTmp - 0.0* granuA;
+                        break;
+                    }
+                    case 1:
+                    {
+                        actionTmp = stateTmp - 2.0* granuA;
+                        break;
+                    }
+                    case 2:
+                    {
+                        actionTmp = stateTmp - 1.0* granuA;
+                        break;
+                    }
+                    case 3:
+                    {
+                        actionTmp = stateTmp + 1.0* granuA;
+                        break;
+                    }
+                    case 4:
+                    {
+                        actionTmp = stateTmp + 2.0* granuA;
+                        break;
+                    }
+                }
             }
 
 
             // init qList
             QEntry qEntry;
             qEntry.action = actionTmp;
-            if(actionTmp < minAction || actionTmp > maxAction)
+            if(actionTmp < minAction || actionTmp >= maxAction)
             {
-                qEntry.qValue = -1;
+                qEntry.qValue = -100;
             }
             else
                 qEntry.qValue = 0;
+
+            if(stateTmp == 0)
+            {
+                if(actionTmp == 0)
+                    qEntry.qValue = -100;
+            }
 
             qEntry.state = stateTmp;
 
@@ -272,6 +350,7 @@ void RLearn::initQtable(float minState, float maxState, float minAction, float m
 
     _actionSuggest = minAction;
     _nextState = minState;
+    _state = minState;
 
     //cout<<" _indexCur: "<<_indexCur<<endl;
 }
@@ -315,16 +394,31 @@ float RLearn::findDisceteValue(float value, bool isState)
 
 void RLearn::computeEPSILON0()
 {
+    // find the index of state
+    size_t stateIndex = findIndex(_states,_state);
     int nonZeroSize = 0;
-    for(int i = 0; i < _numA; i++)
+    for(int i = 0; i < COLNUM; i++)
     {
-        if(qList[i].qValue != 0)
+        if(qList[stateIndex][i].qValue != 0 /*&& qList[stateIndex][i].qValue != -1*/)
             nonZeroSize ++;
     }
-    EPSILON0 = pow(0.5,nonZeroSize/2.0);
+    EPSILON0 = pow(0.5,nonZeroSize);
     cout<<"* nonZeroSize: "<<nonZeroSize<<" * EPSILON0: "<<EPSILON0<<endl;
     //return EPSILON0;
 
+}
+void RLearn::clearList()
+{
+    for(size_t i = 0; i < _numS; i++)
+    {
+        for(size_t j = 0; j < COLNUM; j++)
+        {
+            if(qList[i][j].qValue!= -100)
+            {
+                qList[i][j].qValue = 0;
+            }
+        }
+    }
 }
 
 

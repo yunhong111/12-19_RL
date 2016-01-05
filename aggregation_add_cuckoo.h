@@ -32,19 +32,19 @@ typedef std::vector<double> doubles;
 typedef std::vector<size_t> size_ts;
 typedef std::vector<vector<size_t> > size_tss;
 
-extern CuckooFilter cuckooFilter;
-extern CuckooFilter cuckooFilterInit0;
-extern CuckooTable cuckooBlackKeyTable;
-extern CuckooTable cuckooTableKey;
-extern CuckooTable cuckooAggrKeyTable;
-extern CuckooFilter cuckooFilterFlowEst;
+extern CuckooFilter cuckooFilter[3];
+extern CuckooFilter cuckooFilterInit0[3];
+extern CuckooTable cuckooBlackKeyTable[3];
+extern CuckooTable cuckooTableKey[3];
+extern CuckooTable cuckooAggrKeyTable[3];
+extern CuckooFilter cuckooFilterFlowEst[3];
 
 
 int initCuckoo(vector<string> &key,vector<int> &keyPrefix,
                 vector<int> &keyAction,float &storage, int& finger, char mL0[][4][20]);
 
 bool addCuckooFilter(vector<string> &keys, vector<int> &keyPrefixes,
-                      vector<int> &keyActions);
+                      vector<int> &keyActions, CuckooFilter& cuck, CuckooFilter& cuck0);
 
 bool addCuckooFilter(vector<string> &keys, vector<int> &keyActions);
 
@@ -86,7 +86,7 @@ bool assignAction(vector<string> &key,vector<int> &keyaction,int &actionSize);
 size_t initAggregation(vector<string> &keyin,vector<int> &keyprefix,
                         vector<int> &keyactionin,vector<size_t> &mask, int actionSize,
                         float &storage, bool isInit, int& finger,
-                        vector<int> &UniqueAggPrefix,char mL0[][4][20]);
+                        vector<int> &UniqueAggPrefix,char mL0[][4][20], CuckooFilter cuck, CuckooTable cuckAggr);
 
 size_t aggregation(vector<string> &keyIns,vector<int> &keyPrefixIns,
                         vector<int> &keyActionIns, vector<size_t> &maskes,
